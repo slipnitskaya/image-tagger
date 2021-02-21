@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Caption-Assistant</string>
+    <string name="background">Background</string>
+    <string name="upload_button">Upload Photo</string>
+    <string name="camera_button">Open Camera</string>
+    <string name="chosen_image">Chosen Image</string>
+</resources>
