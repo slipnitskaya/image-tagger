@@ -87,5 +87,8 @@ dependencies {
     implementation  group: 'org.bytedeco', name: 'leptonica', version: leptonicaVersion, classifier: "android-x86"
     implementation  group: 'org.bytedeco', name: 'leptonica', version: leptonicaVersion, classifier: "android-x86_64"
 
+    implementation 'org.pytorch:pytorch_android:1.7.1'
+    implementation 'org.pytorch:pytorch_android_torchvision:1.7.1'
+
     annotationProcessor group: 'org.projectlombok', name: 'lombok', version: '1.18.4'
 }
