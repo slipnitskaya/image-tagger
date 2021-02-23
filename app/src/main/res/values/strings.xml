@@ -4,4 +4,5 @@
     <string name="upload_button">Upload Photo</string>
     <string name="camera_button">Open Camera</string>
     <string name="chosen_image">Chosen Image</string>
+    <string name="predictions">Predictions</string>
 </resources>
