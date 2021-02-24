@@ -8,17 +8,42 @@
     tools:context=".CaptionActivity"
     android:orientation="vertical">
 
-    <ImageView
-        android:id="@+id/chosen_image"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="600dp"
-        android:layout_gravity="center_horizontal"
-        android:contentDescription="@string/chosen_image" />
-    <TextView
-        android:id="@+id/predicted_classes"
+        android:layout_height="0dp"
+        android:layout_weight="3"
+        android:orientation="vertical">
+
+        <ImageView
+            android:id="@+id/chosen_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center_horizontal"
+            android:contentDescription="@string/chosen_image" />
+
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/progress_bar"
+        style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="center_horizontal"
-        android:contentDescription="@string/predictions" />
+        android:layout_height="wrap_content"
+        android:indeterminate="true"
+        />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/predicted_classes"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center_horizontal"
+            android:contentDescription="@string/predictions" />
+
+    </LinearLayout>
 
 </LinearLayout>
