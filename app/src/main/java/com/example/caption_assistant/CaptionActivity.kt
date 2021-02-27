@@ -6,10 +6,13 @@ import android.graphics.BitmapFactory
 import android.media.ThumbnailUtils
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.daveanthonythomas.moshipack.MoshiPack
+import kotlinx.coroutines.*
 import org.nd4j.linalg.api.buffer.DataType
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.factory.Nd4j
@@ -19,7 +22,11 @@ import org.pytorch.Module
 import org.pytorch.torchvision.TensorImageUtils
 import java.io.File
 import java.io.FileOutputStream
-import kotlin.math.*
+import kotlin.coroutines.CoroutineContext
+import kotlin.math.PI
+import kotlin.math.exp
+import kotlin.math.min
+import kotlin.math.round
 
 
 data class ClassStatistic(
@@ -29,14 +36,16 @@ data class ClassStatistic(
     val counts: INDArray
 )
 
-
-class CaptionActivity : AppCompatActivity() {
+class CaptionActivity : AppCompatActivity(), CoroutineScope {
 
     private var imageUri: Uri? = null
     private val topK: Int = 5
     private val embeddingSize: Int = 512
+
     private lateinit var imageView: ImageView
     private lateinit var predictionsTextView: TextView
+    private lateinit var progressBar: ProgressBar
+
     private lateinit var classMean: INDArray
     private lateinit var classStd: INDArray
     private lateinit var sampleCounts: INDArray
@@ -46,34 +55,54 @@ class CaptionActivity : AppCompatActivity() {
     private val numClasses: Int
         get() = classLabels.size
 
+    private lateinit var statsLoading: Deferred<ClassStatistic>
+    private lateinit var modelLoading: Deferred<Module>
+    private lateinit var job: Job
+    override val coroutineContext: CoroutineContext
+        get() = Dispatchers.Main + job
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        job = Job()
 
         setContentView(R.layout.activity_caption)
         imageView = findViewById(R.id.chosen_image)
         predictionsTextView = findViewById(R.id.predicted_classes)
+        progressBar = findViewById(R.id.progress_bar)
+        progressBar.visibility = View.INVISIBLE
 
-        val (classLabels_, classMean_, classStd_, sampleCounts_) = loadStatisticsFromDB()
-        classLabels = classLabels_
-        classMean = classMean_
-        classStd = classStd_
-        sampleCounts = sampleCounts_
-
-        model = loadModel()
+        statsLoading = async(Dispatchers.IO) { loadStatisticsFromDB() }
+        modelLoading = async(Dispatchers.IO) { loadModel() }
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
 
         imageUri = intent.extras?.get("ImageURI") as Uri?
         if (imageUri != null) {
             imageView.setImageURI(imageUri)
+
             contentResolver.openInputStream(imageUri!!).use { fis ->
                 val bitmap = BitmapFactory.decodeStream(fis)
-                val predictedLabels = runInference(bitmap)
-                predictionsTextView.text = predictedLabels.reduce { acc, s -> "$acc, $s" }
+
+                launch {
+                    predictionsTextView.text = "Inferring tags..."
+                    progressBar.visibility = View.VISIBLE
+
+                    val predictedLabels = runInference(bitmap)
+
+                    progressBar.visibility = View.INVISIBLE
+                    predictionsTextView.text = predictedLabels.reduce { acc, s -> "$acc, $s" }
+                }
             }
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+
+        job.cancel()
     }
 
     private fun getTempFileOrCopy(filename: String): File {
@@ -143,57 +172,78 @@ class CaptionActivity : AppCompatActivity() {
 
     private fun loadModel(): Module {
         val tempFile = getTempFileOrCopy("model.pt")
-
         return Module.load(tempFile.absolutePath)
     }
 
-    private fun predictGaussianNaiveBayes(embedding: INDArray, topK: Int = this.topK): List<Long> {
-        val frequencies = sampleCounts.div(sampleCounts.sumNumber())
-        val priors = Transforms.log(frequencies.add(exp(-120.0)))
+    private suspend fun predictGaussianNaiveBayes(embedding: INDArray, topK: Int = this.topK): List<Long> {
+        return withContext(Dispatchers.Default) {
+            val frequencies = sampleCounts.div(sampleCounts.sumNumber())
+            val priors = Transforms.log(frequencies.add(exp(-120.0)))
 
-        val jointLogLikelihood = Nd4j.zeros(numClasses)
-        for (cid in 0 until numClasses.toLong()) {
-            val prior = priors.getDouble(cid)
-            val mean = classMean.getRow(cid).castTo(DataType.DOUBLE)
-            val std = classStd.getRow(cid).castTo(DataType.DOUBLE)
+            launch(Dispatchers.Main) { progressBar.isIndeterminate = false }
 
-            val x = embedding.sub(mean)
-            val posterior = x
+            val jointLogLikelihood = Nd4j.zeros(numClasses)
+            for (cid in 0 until numClasses.toLong()) {
+                val prior = priors.getDouble(cid)
+                val mean = classMean.getRow(cid).castTo(DataType.DOUBLE)
+                val std = classStd.getRow(cid).castTo(DataType.DOUBLE)
+
+                val x = embedding.sub(mean)
+                val posterior = x
                     .mul(x)
                     .div(std)
                     .sum()
                     .add(
-                            Transforms.log(
-                                    std.mul(2.0 * PI)
-                            ).sumNumber()
+                        Transforms.log(
+                            std.mul(2.0 * PI)
+                        ).sumNumber()
                     ).sumNumber().toDouble()
-            jointLogLikelihood.putScalar(cid, prior * posterior)
-        }
+                jointLogLikelihood.putScalar(cid, prior * posterior)
 
-        return IntRange(1, min(topK, numClasses)).map {
-            val predCid = jointLogLikelihood.argMax().getLong(0)
-            jointLogLikelihood.putScalar(predCid, -1e9)
-            predCid
-        }.toList()
+                launch(Dispatchers.Main) {
+                    progressBar.progress = round(100 * cid.toFloat() / numClasses.toFloat()).toInt()
+                }
+            }
+
+            launch(Dispatchers.Main) { progressBar.isIndeterminate = true }
+
+            IntRange(1, min(topK, numClasses)).map {
+                val predCid = jointLogLikelihood.argMax().getLong(0)
+                jointLogLikelihood.putScalar(predCid, -1e9)
+                predCid
+            }.toList()
+        }
     }
 
-    private fun runInference(bitmap: Bitmap): List<String> {
-        val shortSide = min(bitmap.height, bitmap.width)
-        val inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
-            Bitmap.createScaledBitmap(
-                ThumbnailUtils.extractThumbnail(bitmap, shortSide, shortSide),
-                256,
-                256,
-                true
-            ),
-            TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
-            TensorImageUtils.TORCHVISION_NORM_STD_RGB
-        )
-        val outputTensor = model.forward(IValue.from(inputTensor)).toTensor()
-        val output = outputTensor.dataAsFloatArray
-        val embedding = Nd4j.createFromArray(*output).getRow(0)
-        val predictionIds = predictGaussianNaiveBayes(embedding)
+    private suspend fun runInference(bitmap: Bitmap): List<String> {
+        return withContext(Dispatchers.Default) {
+            val shortSide = min(bitmap.height, bitmap.width)
+            val inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
+                Bitmap.createScaledBitmap(
+                    ThumbnailUtils.extractThumbnail(bitmap, shortSide, shortSide),
+                    256,
+                    256,
+                    true
+                ),
+                TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
+                TensorImageUtils.TORCHVISION_NORM_STD_RGB
+            )
 
-        return predictionIds.map { pred -> classLabels[pred]!! }
+            model = modelLoading.await()
+
+            val outputTensor = model.forward(IValue.from(inputTensor)).toTensor()
+            val output = outputTensor.dataAsFloatArray
+            val embedding = Nd4j.createFromArray(*output).getRow(0)
+
+            val (classLabels_, classMean_, classStd_, sampleCounts_) = statsLoading.await()
+            classLabels = classLabels_
+            classMean = classMean_
+            classStd = classStd_
+            sampleCounts = sampleCounts_
+
+            val predictionIds = predictGaussianNaiveBayes(embedding)
+
+            predictionIds.map { pred -> classLabels[pred]!! }
+        }
     }
 }
