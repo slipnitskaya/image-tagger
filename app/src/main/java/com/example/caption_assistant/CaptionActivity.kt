@@ -38,8 +38,11 @@ data class ClassStatistic(
 
 class CaptionActivity : AppCompatActivity(), CoroutineScope {
 
-    private var imageUri: Uri? = null
     private val topK: Int = 5
+
+    private var imageUri: Uri? = null
+    private val imageWidth: Int = 256
+    private val imageHeight: Int = 256
     private val embeddingSize: Int = 512
 
     private lateinit var imageView: ImageView
@@ -54,6 +57,9 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
 
     private val numClasses: Int
         get() = classLabels.size
+
+    private val previewSize: Pair<Int, Int>
+        get() = Pair(imageWidth, imageHeight)
 
     private lateinit var statsLoading: Deferred<ClassStatistic>
     private lateinit var modelLoading: Deferred<Module>
@@ -81,14 +87,13 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
 
         imageUri = intent.extras?.get("ImageURI") as Uri?
         if (imageUri != null) {
-            imageView.setImageURI(imageUri)
-
-            contentResolver.openInputStream(imageUri!!).use { fis ->
-                val bitmap = BitmapFactory.decodeStream(fis)
+            val bitmap = loadBitmap(imageUri!!)
+            if (bitmap != null) {
+                imageView.setImageBitmap(bitmap)
+                progressBar.visibility = View.VISIBLE
 
                 launch {
                     predictionsTextView.text = "Inferring tags..."
-                    progressBar.visibility = View.VISIBLE
 
                     val predictedLabels = runInference(bitmap)
 
@@ -103,6 +108,45 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
         super.onPause()
 
         job.cancel()
+    }
+
+    private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        // Raw height and width of image
+        val (height: Int, width: Int) = options.run { outHeight to outWidth }
+        var inSampleSize = 1
+
+        if (height > reqHeight || width > reqWidth) {
+
+            val halfHeight: Int = height / 2
+            val halfWidth: Int = width / 2
+
+            // Calculate the largest inSampleSize value that is a power of 2 and keeps both
+            // height and width larger than the requested height and width.
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+
+        return inSampleSize
+    }
+
+    private fun loadBitmap(imageUri: Uri): Bitmap? {
+        val (reqWidth, reqHeight) = previewSize
+
+        return BitmapFactory.Options().run {
+            inJustDecodeBounds = true
+
+            contentResolver.openInputStream(imageUri).use {
+                BitmapFactory.decodeStream(it, null, this)
+            }
+
+            inSampleSize = calculateInSampleSize(this, reqWidth, reqHeight)
+            inJustDecodeBounds = false
+
+            contentResolver.openInputStream(imageUri).use {
+                BitmapFactory.decodeStream(it, null, this)
+            }
+        }
     }
 
     private fun getTempFileOrCopy(filename: String): File {
@@ -128,44 +172,44 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
         val sampleCounts: INDArray?
 
         SQLiteDatabase
-            .openDatabase(tempFile, SQLiteDatabase.OpenParams.Builder().build())
-            .use { dbConn ->
-                dbConn.query(
-                    "statistics",
-                    arrayOf("cid", "label", "mean", "std", "counts"),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null
-                ).use { cur ->
-                    val numClasses = cur.count
+                .openDatabase(tempFile, SQLiteDatabase.OpenParams.Builder().build())
+                .use { dbConn ->
+                    dbConn.query(
+                            "statistics",
+                            arrayOf("cid", "label", "mean", "std", "counts"),
+                            null,
+                            null,
+                            null,
+                            null,
+                            null
+                    ).use { cur ->
+                        val numClasses = cur.count
 
-                    classMean = Nd4j.zeros(numClasses, embeddingSize).castTo(DataType.FLOAT)
-                    classStd = Nd4j.zeros(numClasses, embeddingSize).castTo(DataType.FLOAT)
-                    sampleCounts = Nd4j.zeros(numClasses).castTo(DataType.FLOAT)
+                        classMean = Nd4j.zeros(numClasses, embeddingSize).castTo(DataType.FLOAT)
+                        classStd = Nd4j.zeros(numClasses, embeddingSize).castTo(DataType.FLOAT)
+                        sampleCounts = Nd4j.zeros(numClasses).castTo(DataType.FLOAT)
 
-                    val msgPack = MoshiPack()
+                        val msgPack = MoshiPack()
 
-                    generateSequence { if (cur.moveToNext()) cur else null }
-                        .forEach { row ->
-                            val classId = row.getLong(row.getColumnIndex("cid"))
-                            val label = row.getString(row.getColumnIndex("label"))
-                            val mean = Nd4j.create(msgPack.unpack<FloatArray>(
-                                row.getBlob(row.getColumnIndex("mean"))
-                            ))
-                            val std = Nd4j.create(msgPack.unpack<FloatArray>(
-                                row.getBlob(row.getColumnIndex("std"))
-                            ))
-                            val count = row.getInt(row.getColumnIndex("counts"))
+                        generateSequence { if (cur.moveToNext()) cur else null }
+                                .forEach { row ->
+                                    val classId = row.getLong(row.getColumnIndex("cid"))
+                                    val label = row.getString(row.getColumnIndex("label"))
+                                    val mean = Nd4j.create(msgPack.unpack<FloatArray>(
+                                            row.getBlob(row.getColumnIndex("mean"))
+                                    ))
+                                    val std = Nd4j.create(msgPack.unpack<FloatArray>(
+                                            row.getBlob(row.getColumnIndex("std"))
+                                    ))
+                                    val count = row.getInt(row.getColumnIndex("counts"))
 
-                            classMean!!.putRow(classId, mean)
-                            classStd!!.putRow(classId, std)
-                            classLabels[classId] = label
-                            sampleCounts!!.putScalar(classId, count)
-                        }
+                                    classMean!!.putRow(classId, mean)
+                                    classStd!!.putRow(classId, std)
+                                    classLabels[classId] = label
+                                    sampleCounts!!.putScalar(classId, count)
+                                }
+                    }
                 }
-            }
 
         return ClassStatistic(classLabels, classMean!!, classStd!!, sampleCounts!!)
     }
@@ -190,14 +234,14 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
 
                 val x = embedding.sub(mean)
                 val posterior = x
-                    .mul(x)
-                    .div(std)
-                    .sum()
-                    .add(
-                        Transforms.log(
-                            std.mul(2.0 * PI)
-                        ).sumNumber()
-                    ).sumNumber().toDouble()
+                        .mul(x)
+                        .div(std)
+                        .sum()
+                        .add(
+                                Transforms.log(
+                                        std.mul(2.0 * PI)
+                                ).sumNumber()
+                        ).sumNumber().toDouble()
                 jointLogLikelihood.putScalar(cid, prior * posterior)
 
                 launch(Dispatchers.Main) {
@@ -219,14 +263,14 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
         return withContext(Dispatchers.Default) {
             val shortSide = min(bitmap.height, bitmap.width)
             val inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
-                Bitmap.createScaledBitmap(
-                    ThumbnailUtils.extractThumbnail(bitmap, shortSide, shortSide),
-                    256,
-                    256,
-                    true
-                ),
-                TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
-                TensorImageUtils.TORCHVISION_NORM_STD_RGB
+                    Bitmap.createScaledBitmap(
+                            ThumbnailUtils.extractThumbnail(bitmap, shortSide, shortSide),
+                            imageWidth,
+                            imageHeight,
+                            true
+                    ),
+                    TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
+                    TensorImageUtils.TORCHVISION_NORM_STD_RGB
             )
 
             model = modelLoading.await()
