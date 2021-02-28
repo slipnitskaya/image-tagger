@@ -23,20 +23,21 @@ import org.nd4j.linalg.ops.transforms.Transforms
 import org.pytorch.IValue
 import org.pytorch.Module
 import org.pytorch.torchvision.TensorImageUtils
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.security.MessageDigest
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.min
-import kotlin.math.round
 
 
 data class ClassStatistic(
-        val label: Map<Long, String>,
-        val mean: INDArray,
-        val std: INDArray,
-        val counts: INDArray
+    val label: Map<Long, String>,
+    val mean: INDArray,
+    val std: INDArray,
+    val counts: INDArray
 )
 
 class CaptionActivity : AppCompatActivity(), CoroutineScope {
@@ -47,6 +48,8 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
     private val imageWidth: Int = 256
     private val imageHeight: Int = 256
     private val embeddingSize: Int = 512
+
+    private val predictions = HashMap<String, List<Long>>()
 
     private lateinit var imageView: ImageView
     private lateinit var progressBar: ProgressBar
@@ -70,7 +73,7 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
     private lateinit var modelLoading: Deferred<Module>
     private lateinit var job: Job
     override val coroutineContext: CoroutineContext
-        get() = Dispatchers.Main + job
+        get() = Dispatchers.Default + job
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -101,28 +104,54 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
             val bitmap = loadBitmap(imageUri!!)
             if (bitmap != null) {
                 imageView.setImageBitmap(bitmap)
-                progressBar.visibility = View.VISIBLE
-                progressBarText.visibility = View.VISIBLE
 
-                launch {
-                    progressBarText.text = "Inferring tags..."
-
-                    val predictedLabels = runInference(bitmap).toMutableList()
-
-                    progressBarText.visibility = View.INVISIBLE
-                    progressBar.visibility = View.INVISIBLE
-                    confirmButton.visibility = View.VISIBLE
-
-                    predictedLabels.forEach { label ->
-                        val chip = Chip(predictionsChipGroup.context)
-                        chip.text = label
-                        chip.isCloseIconVisible = true
-
-                        chip.setOnCloseIconClickListener {
-                            predictedLabels.remove(label)
-                            predictionsChipGroup.removeView(it)
+                val md5 = ByteArrayOutputStream().use { baos ->
+                    MessageDigest
+                        .getInstance("MD5")
+                        .apply {
+                            update(baos.apply {
+                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, this)
+                            }.toByteArray())
                         }
-                        predictionsChipGroup.addView(chip)
+                        .digest()
+                        .map { hexByte -> hexByte.toInt().and(0xFF).toString(16) }
+                        .reduce { acc, s -> "${acc}${s}" }
+                }
+
+                launch(coroutineContext) {
+                    val predictedClassIds = when(predictions.containsKey(md5)) {
+                        true -> predictions[md5]
+                        false -> {
+                            launch(Dispatchers.Main) {
+                                progressBar.visibility = View.VISIBLE
+                                progressBarText.visibility = View.VISIBLE
+                                progressBarText.text = "Inferring tags..."
+                            }
+                            runInference(bitmap).also { predictions[md5] = it }
+                        }
+                    }
+
+                    launch(Dispatchers.Main) {
+                        progressBar.visibility = View.INVISIBLE
+                        progressBarText.visibility = View.INVISIBLE
+                        confirmButton.visibility = View.VISIBLE
+
+                        val predictedLabels = predictedClassIds
+                                ?.map { cid -> classLabels[cid] }
+                                ?.toMutableList()
+                                ?: mutableListOf()
+
+                        predictedLabels.forEach { label ->
+                            val chip = Chip(predictionsChipGroup.context)
+                            chip.text = label
+                            chip.isCloseIconVisible = true
+
+                            chip.setOnCloseIconClickListener {
+                                predictedLabels.remove(label)
+                                predictionsChipGroup.removeView(it)
+                            }
+                            predictionsChipGroup.addView(chip)
+                        }
                     }
                 }
             }
@@ -200,13 +229,13 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
                 .openDatabase(tempFile, SQLiteDatabase.OpenParams.Builder().build())
                 .use { dbConn ->
                     dbConn.query(
-                            "statistics",
-                            arrayOf("cid", "label", "mean", "std", "counts"),
-                            null,
-                            null,
-                            null,
-                            null,
-                            null
+                        "statistics",
+                        arrayOf("cid", "label", "mean", "std", "counts"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
                     ).use { cur ->
                         val numClasses = cur.count
 
@@ -218,22 +247,22 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
                         val msgPack = MoshiPack()
 
                         generateSequence { if (cur.moveToNext()) cur else null }
-                                .forEach { row ->
-                                    val classId = row.getLong(row.getColumnIndex("cid"))
-                                    val label = row.getString(row.getColumnIndex("label"))
-                                    val mean = Nd4j.create(msgPack.unpack<FloatArray>(
-                                            row.getBlob(row.getColumnIndex("mean"))
-                                    ))
-                                    val std = Nd4j.create(msgPack.unpack<FloatArray>(
-                                            row.getBlob(row.getColumnIndex("std"))
-                                    ))
-                                    val count = row.getInt(row.getColumnIndex("counts"))
+                            .forEach { row ->
+                                val classId = row.getLong(row.getColumnIndex("cid"))
+                                val label = row.getString(row.getColumnIndex("label"))
+                                val mean = Nd4j.create(msgPack.unpack<FloatArray>(
+                                        row.getBlob(row.getColumnIndex("mean"))
+                                ))
+                                val std = Nd4j.create(msgPack.unpack<FloatArray>(
+                                        row.getBlob(row.getColumnIndex("std"))
+                                ))
+                                val count = row.getInt(row.getColumnIndex("counts"))
 
-                                    classMean!!.putRow(classId, mean)
-                                    classStd!!.putRow(classId, std)
-                                    classLabels[classId] = label
-                                    sampleCounts!!.putScalar(classId, count)
-                                }
+                                classMean!!.putRow(classId, mean)
+                                classStd!!.putRow(classId, std)
+                                classLabels[classId] = label
+                                sampleCounts!!.putScalar(classId, count)
+                            }
                     }
                 }
 
@@ -245,35 +274,55 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
         return Module.load(tempFile.absolutePath)
     }
 
+    private suspend fun calculateGaussianLikelihood(
+        embedding: INDArray, prior: Double, mean: INDArray, std: INDArray
+    ): Double {
+        return withContext(coroutineContext) {
+            val x = embedding.sub(mean)
+            val posterior = x
+                .mul(x)
+                .div(std)
+                .sum()
+                .add(
+                    Transforms.log(
+                        std.mul(2.0 * PI)
+                    ).sumNumber()
+                ).sumNumber().toDouble()
+
+            prior * posterior
+        }
+    }
+
     private suspend fun predictGaussianNaiveBayes(embedding: INDArray, topK: Int = this.topK): List<Long> {
-        return withContext(Dispatchers.Default) {
+        return withContext(coroutineContext) {
             val frequencies = sampleCounts.div(sampleCounts.sumNumber())
             val priors = Transforms.log(frequencies.add(exp(-120.0)))
 
-            launch(Dispatchers.Main) { progressBar.isIndeterminate = false }
+            launch(Dispatchers.Main) {
+                progressBar.isIndeterminate = false
+                progressBar.min = 0
+                progressBar.max = numClasses
+                progressBar.progress = 0
+            }
 
+            val jobs = ArrayList<Deferred<Job>>()
             val jointLogLikelihood = Nd4j.zeros(numClasses)
             for (cid in 0 until numClasses.toLong()) {
                 val prior = priors.getDouble(cid)
                 val mean = classMean.getRow(cid).castTo(DataType.DOUBLE)
                 val std = classStd.getRow(cid).castTo(DataType.DOUBLE)
 
-                val x = embedding.sub(mean)
-                val posterior = x
-                        .mul(x)
-                        .div(std)
-                        .sum()
-                        .add(
-                                Transforms.log(
-                                        std.mul(2.0 * PI)
-                                ).sumNumber()
-                        ).sumNumber().toDouble()
-                jointLogLikelihood.putScalar(cid, prior * posterior)
+                val j = async(coroutineContext) {
+                    val jLL = calculateGaussianLikelihood(embedding, prior, mean, std)
+                    jointLogLikelihood.putScalar(cid, jLL)
 
-                launch(Dispatchers.Main) {
-                    progressBar.progress = round(100 * cid.toFloat() / numClasses.toFloat()).toInt()
+                    launch(Dispatchers.Main) {
+                        progressBar.progress += 1
+                    }
                 }
+                jobs.add(j)
             }
+            jobs.awaitAll()
 
             launch(Dispatchers.Main) { progressBar.isIndeterminate = true }
 
@@ -285,18 +334,18 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
         }
     }
 
-    private suspend fun runInference(bitmap: Bitmap): List<String> {
-        return withContext(Dispatchers.Default) {
+    private suspend fun runInference(bitmap: Bitmap): List<Long> {
+        return withContext(coroutineContext) {
             val shortSide = min(bitmap.height, bitmap.width)
             val inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
-                    Bitmap.createScaledBitmap(
-                            ThumbnailUtils.extractThumbnail(bitmap, shortSide, shortSide),
-                            imageWidth,
-                            imageHeight,
-                            true
-                    ),
-                    TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
-                    TensorImageUtils.TORCHVISION_NORM_STD_RGB
+                Bitmap.createScaledBitmap(
+                    ThumbnailUtils.extractThumbnail(bitmap, shortSide, shortSide),
+                    imageWidth,
+                    imageHeight,
+                    true
+                ),
+                TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
+                TensorImageUtils.TORCHVISION_NORM_STD_RGB
             )
 
             model = modelLoading.await()
@@ -311,9 +360,7 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
             classStd = classStd_
             sampleCounts = sampleCounts_
 
-            val predictionIds = predictGaussianNaiveBayes(embedding)
-
-            predictionIds.map { pred -> classLabels[pred]!! }
+            predictGaussianNaiveBayes(embedding)
         }
     }
 }
