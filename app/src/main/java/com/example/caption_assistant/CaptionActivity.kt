@@ -7,11 +7,14 @@ import android.media.ThumbnailUtils
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.daveanthonythomas.moshipack.MoshiPack
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import kotlinx.coroutines.*
 import org.nd4j.linalg.api.buffer.DataType
 import org.nd4j.linalg.api.ndarray.INDArray
@@ -30,10 +33,10 @@ import kotlin.math.round
 
 
 data class ClassStatistic(
-    val label: Map<Long, String>,
-    val mean: INDArray,
-    val std: INDArray,
-    val counts: INDArray
+        val label: Map<Long, String>,
+        val mean: INDArray,
+        val std: INDArray,
+        val counts: INDArray
 )
 
 class CaptionActivity : AppCompatActivity(), CoroutineScope {
@@ -46,8 +49,10 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
     private val embeddingSize: Int = 512
 
     private lateinit var imageView: ImageView
-    private lateinit var predictionsTextView: TextView
     private lateinit var progressBar: ProgressBar
+    private lateinit var progressBarText: TextView
+    private lateinit var predictionsChipGroup: ChipGroup
+    private lateinit var confirmButton: Button
 
     private lateinit var classMean: INDArray
     private lateinit var classStd: INDArray
@@ -74,10 +79,16 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
 
         setContentView(R.layout.activity_caption)
         imageView = findViewById(R.id.chosen_image)
-        predictionsTextView = findViewById(R.id.predicted_classes)
         progressBar = findViewById(R.id.progress_bar)
-        progressBar.visibility = View.INVISIBLE
+        progressBarText = findViewById(R.id.progress_bar_text)
+        predictionsChipGroup = findViewById(R.id.predicted_classes)
+        confirmButton = findViewById(R.id.confirm_button)
 
+        progressBar.visibility = View.INVISIBLE
+        progressBarText.visibility = View.INVISIBLE
+        confirmButton.visibility = View.INVISIBLE
+
+        confirmButton.setOnClickListener { this.finish() }
         statsLoading = async(Dispatchers.IO) { loadStatisticsFromDB() }
         modelLoading = async(Dispatchers.IO) { loadModel() }
     }
@@ -91,14 +102,28 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
             if (bitmap != null) {
                 imageView.setImageBitmap(bitmap)
                 progressBar.visibility = View.VISIBLE
+                progressBarText.visibility = View.VISIBLE
 
                 launch {
-                    predictionsTextView.text = "Inferring tags..."
+                    progressBarText.text = "Inferring tags..."
 
-                    val predictedLabels = runInference(bitmap)
+                    val predictedLabels = runInference(bitmap).toMutableList()
 
+                    progressBarText.visibility = View.INVISIBLE
                     progressBar.visibility = View.INVISIBLE
-                    predictionsTextView.text = predictedLabels.reduce { acc, s -> "$acc, $s" }
+                    confirmButton.visibility = View.VISIBLE
+
+                    predictedLabels.forEach { label ->
+                        val chip = Chip(predictionsChipGroup.context)
+                        chip.text = label
+                        chip.isCloseIconVisible = true
+
+                        chip.setOnCloseIconClickListener {
+                            predictedLabels.remove(label)
+                            predictionsChipGroup.removeView(it)
+                        }
+                        predictionsChipGroup.addView(chip)
+                    }
                 }
             }
         }
@@ -189,6 +214,7 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
                         classStd = Nd4j.zeros(numClasses, embeddingSize).castTo(DataType.FLOAT)
                         sampleCounts = Nd4j.zeros(numClasses).castTo(DataType.FLOAT)
 
+                        // instantiate de-serializer from BLOB to INDArray
                         val msgPack = MoshiPack()
 
                         generateSequence { if (cur.moveToNext()) cur else null }

@@ -5,4 +5,5 @@
     <string name="camera_button">Open Camera</string>
     <string name="chosen_image">Chosen Image</string>
     <string name="predictions">Predictions</string>
+    <string name="confirm_button">Confirm</string>
 </resources>
