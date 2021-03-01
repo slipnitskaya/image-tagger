@@ -1,5 +1,6 @@
 package com.example.caption_assistant
 
+import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -12,6 +13,9 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.database.sqlite.transaction
+import androidx.core.view.get
+import androidx.core.view.size
 import com.daveanthonythomas.moshipack.MoshiPack
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
@@ -42,7 +46,7 @@ data class ClassStatistic(
 
 class CaptionActivity : AppCompatActivity(), CoroutineScope {
 
-    private val topK: Int = 5
+    private val momentum: Float = 0.05f
 
     private var imageUri: Uri? = null
     private val imageWidth: Int = 256
@@ -91,7 +95,55 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
         progressBarText.visibility = View.INVISIBLE
         confirmButton.visibility = View.INVISIBLE
 
-        confirmButton.setOnClickListener { this.finish() }
+        // update statistics
+        confirmButton.setOnClickListener {
+            val embedding = imageView.tag as INDArray
+
+            val contentValues = HashMap<Long, ContentValues>()
+            val msgPack = MoshiPack()
+            IntRange(0, predictionsChipGroup.childCount - 1)
+                    .map { predictionsChipGroup[it].id.toLong() }
+                    .forEach { cid ->
+                        val mean = classMean.getRow(cid).castTo(DataType.DOUBLE)
+                        val std = classStd.getRow(cid).castTo(DataType.DOUBLE)
+                        val count = sampleCounts.getInt(cid.toInt())
+
+                        val diff = embedding.sub(mean)
+                        val inc = diff.mul(momentum)
+                        val newMean = mean.add(inc)
+                        val newStd = std.add(diff.mul(inc)).mul(1.0 - momentum)
+                        val newCount = count + 1
+
+                        classMean.putRow(cid, newMean.castTo(classMean.dataType()))
+                        classStd.putRow(cid, newStd.castTo(classStd.dataType()))
+                        sampleCounts.putScalar(cid, newCount)
+
+                        val cv = ContentValues()
+                        cv.put("mean", msgPack.packToByteArray<FloatArray>(newMean.toFloatVector()))
+                        cv.put("std", msgPack.packToByteArray<FloatArray>(newStd.toFloatVector()))
+                        cv.put("counts", newCount)
+                        contentValues[cid] = cv
+                    }
+
+            val tempFile = getTempFileOrCopy("caption_assistant.db")
+            SQLiteDatabase
+                    .openDatabase(tempFile, SQLiteDatabase.OpenParams.Builder().build())
+                    .use { dbConn ->
+                        dbConn.transaction {
+                            contentValues.forEach { (cid, cv) ->
+                                dbConn.update(
+                                        "statistics",
+                                        cv,
+                                        "cid = ?",
+                                        arrayOf(cid.toString())
+                                )
+                            }
+                        }
+
+                    }
+
+            this.finish()
+        }
         statsLoading = async(Dispatchers.IO) { loadStatisticsFromDB() }
         modelLoading = async(Dispatchers.IO) { loadModel() }
     }
@@ -141,14 +193,16 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
                                 ?.toMutableList()
                                 ?: mutableListOf()
 
-                        predictedLabels.forEach { label ->
+                        predictedLabels.forEachIndexed { idx, label ->
                             val chip = Chip(predictionsChipGroup.context)
+                            chip.id = predictedClassIds!![idx].toInt()
                             chip.text = label
                             chip.isCloseIconVisible = true
 
                             chip.setOnCloseIconClickListener {
                                 predictedLabels.remove(label)
                                 predictionsChipGroup.removeView(it)
+                                confirmButton.isEnabled = predictionsChipGroup.size > 0
                             }
                             predictionsChipGroup.addView(chip)
                         }
@@ -293,7 +347,7 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
         }
     }
 
-    private suspend fun predictGaussianNaiveBayes(embedding: INDArray, topK: Int = this.topK): List<Long> {
+    private suspend fun predictGaussianNaiveBayes(embedding: INDArray): List<Long> {
         return withContext(coroutineContext) {
             val frequencies = sampleCounts.div(sampleCounts.sumNumber())
             val priors = Transforms.log(frequencies.add(exp(-120.0)))
@@ -326,11 +380,23 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
 
             launch(Dispatchers.Main) { progressBar.isIndeterminate = true }
 
-            IntRange(1, min(topK, numClasses)).map {
-                val predCid = jointLogLikelihood.argMax().getLong(0)
-                jointLogLikelihood.putScalar(predCid, -1e9)
-                predCid
-            }.toList()
+            launch(Dispatchers.Main) { progressBar.isIndeterminate = true }
+
+            // predict top labels
+            val predictedClassIds = mutableListOf<Long>()
+            val probabilities = Transforms.softmax(
+                    jointLogLikelihood.div(
+                            Transforms.abs(jointLogLikelihood).maxNumber()
+                    ).mul(50)
+            )
+            var cumProbability = 0.0
+            while (cumProbability < 0.9) {
+                val predictedCid = probabilities.argMax().getLong(0)
+                predictedClassIds.add(predictedCid)
+                cumProbability += probabilities.getDouble(predictedCid)
+                probabilities.putScalar(predictedCid, 0.0)
+            }
+            predictedClassIds
         }
     }
 
@@ -353,6 +419,8 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
             val outputTensor = model.forward(IValue.from(inputTensor)).toTensor()
             val output = outputTensor.dataAsFloatArray
             val embedding = Nd4j.createFromArray(*output).getRow(0)
+
+            launch(Dispatchers.Main) { imageView.tag = embedding }
 
             val (classLabels_, classMean_, classStd_, sampleCounts_) = statsLoading.await()
             classLabels = classLabels_
