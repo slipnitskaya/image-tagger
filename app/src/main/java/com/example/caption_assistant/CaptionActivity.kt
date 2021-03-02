@@ -1,6 +1,7 @@
 package com.example.caption_assistant
 
 import android.content.ContentValues
+import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -8,10 +9,8 @@ import android.media.ThumbnailUtils
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
-import android.widget.Button
-import android.widget.ImageView
-import android.widget.ProgressBar
-import android.widget.TextView
+import android.view.inputmethod.InputMethodManager
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.database.sqlite.transaction
 import androidx.core.view.get
@@ -58,8 +57,10 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
     private lateinit var imageView: ImageView
     private lateinit var progressBar: ProgressBar
     private lateinit var progressBarText: TextView
-    private lateinit var predictionsChipGroup: ChipGroup
+    private lateinit var discardButton: Button
+    private lateinit var addTagButton: Button
     private lateinit var confirmButton: Button
+    lateinit var predictionsChipGroup: ChipGroup
 
     private lateinit var classMean: INDArray
     private lateinit var classStd: INDArray
@@ -89,11 +90,29 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
         progressBar = findViewById(R.id.progress_bar)
         progressBarText = findViewById(R.id.progress_bar_text)
         predictionsChipGroup = findViewById(R.id.predicted_classes)
+        discardButton = findViewById(R.id.discard_button)
+        addTagButton = findViewById(R.id.add_button)
         confirmButton = findViewById(R.id.confirm_button)
 
         progressBar.visibility = View.INVISIBLE
         progressBarText.visibility = View.INVISIBLE
+        discardButton.visibility = View.INVISIBLE
+        addTagButton.visibility = View.INVISIBLE
         confirmButton.visibility = View.INVISIBLE
+
+        discardButton.setOnClickListener { this.finish() }
+
+        addTagButton.setOnClickListener { btn ->
+            btn as Button
+
+            with(TagListDialog(this, classLabels)) {
+                show()
+            }
+            getSystemService(Context.INPUT_METHOD_SERVICE).also { imm ->
+                imm as InputMethodManager
+                imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, InputMethodManager.HIDE_IMPLICIT_ONLY)
+            }
+        }
 
         // update statistics
         confirmButton.setOnClickListener {
@@ -102,7 +121,7 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
             val contentValues = HashMap<Long, ContentValues>()
             val msgPack = MoshiPack()
             IntRange(0, predictionsChipGroup.childCount - 1)
-                    .map { predictionsChipGroup[it].id.toLong() }
+                    .map { idx -> predictionsChipGroup[idx].id.toLong() }
                     .forEach { cid ->
                         val mean = classMean.getRow(cid).castTo(DataType.DOUBLE)
                         val std = classStd.getRow(cid).castTo(DataType.DOUBLE)
@@ -144,6 +163,7 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
 
             this.finish()
         }
+
         statsLoading = async(Dispatchers.IO) { loadStatisticsFromDB() }
         modelLoading = async(Dispatchers.IO) { loadModel() }
     }
@@ -186,6 +206,8 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
                     launch(Dispatchers.Main) {
                         progressBar.visibility = View.INVISIBLE
                         progressBarText.visibility = View.INVISIBLE
+                        discardButton.visibility = View.VISIBLE
+                        addTagButton.visibility = View.VISIBLE
                         confirmButton.visibility = View.VISIBLE
 
                         val predictedLabels = predictedClassIds
@@ -202,9 +224,14 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
                             chip.setOnCloseIconClickListener {
                                 predictedLabels.remove(label)
                                 predictionsChipGroup.removeView(it)
-                                confirmButton.isEnabled = predictionsChipGroup.size > 0
+                                if (predictionsChipGroup.size > 0) {
+                                    enableConfirmButton()
+                                } else {
+                                    disableConfirmButton()
+                                }
                             }
                             predictionsChipGroup.addView(chip)
+                            enableConfirmButton()
                         }
                     }
                 }
@@ -430,5 +457,13 @@ class CaptionActivity : AppCompatActivity(), CoroutineScope {
 
             predictGaussianNaiveBayes(embedding)
         }
+    }
+
+    fun enableConfirmButton() {
+        confirmButton.isEnabled = true
+    }
+
+    fun disableConfirmButton() {
+        confirmButton.isEnabled = false
     }
 }

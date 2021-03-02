@@ -8,9 +8,10 @@
     tools:context=".CaptionActivity"
     android:orientation="vertical">
 
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="480dp"
+        android:layout_height="0dp"
+        android:layout_weight="5"
         android:orientation="vertical">
 
         <ImageView
@@ -19,7 +20,7 @@
             android:layout_height="match_parent"
             android:layout_gravity="center_horizontal"
             android:contentDescription="@string/chosen_image" />
-    </LinearLayout>
+    </FrameLayout>
 
     <ProgressBar
         android:id="@+id/progress_bar"
@@ -30,7 +31,8 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="2"
         android:orientation="vertical">
 
         <TextView
@@ -40,22 +42,60 @@
             android:layout_gravity="center_horizontal"
             android:gravity="center" />
 
-        <com.google.android.material.chip.ChipGroup
-            android:id="@+id/predicted_classes"
-            style="@style/Widget.MaterialComponents.Chip.Entry"
+        <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="55sp"
-            android:layout_gravity="center_horizontal"
-            android:text="@string/predictions" />
+            android:layout_height="match_parent">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:orientation="vertical" >
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/predicted_classes"
+                    style="@style/Widget.MaterialComponents.Chip.Entry"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center_horizontal"
+                    android:text="@string/predictions">
+
+                </com.google.android.material.chip.ChipGroup>
+            </LinearLayout>
+        </ScrollView>
+
+    </LinearLayout>
+
+    <FrameLayout
+        style="?android:attr/buttonBarStyle"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/discard_button"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center|start"
+            android:text="@string/discard_button"
+            tools:ignore="NestedWeights" />
+
+        <Button
+            android:id="@+id/add_button"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="@string/add_tag" />
 
         <Button
             android:id="@+id/confirm_button"
+            style="?android:attr/buttonBarButtonStyle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:text="@string/confirm_button"
-            android:textSize="10sp"
-            tools:ignore="SmallSp" />
-    </LinearLayout>
+            android:layout_gravity="center|end"
+            android:text="@string/confirm_button" />
+    </FrameLayout>
 
 </LinearLayout>

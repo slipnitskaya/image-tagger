@@ -6,4 +6,6 @@
     <string name="chosen_image">Chosen Image</string>
     <string name="predictions">Predictions</string>
     <string name="confirm_button">Confirm</string>
+    <string name="add_tag">Add Tag</string>
+    <string name="discard_button">Discard</string>
 </resources>
