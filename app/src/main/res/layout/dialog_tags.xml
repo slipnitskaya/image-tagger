@@ -1,20 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout android:id="@+id/LinearLayout01"
+<LinearLayout xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/LinearLayout01"
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_height="fill_parent"
     android:layout_width="fill_parent"
     android:orientation="vertical"
     android:gravity="center">
 
-    <EditText android:id="@+id/filter_tags"
-        android:maxLines="1"
-        android:layout_height="wrap_content"
+    <RelativeLayout
         android:layout_width="match_parent"
-        android:gravity="start"
-        android:importantForAutofill="no"
-        android:inputType=""
-        android:textSize="18sp">
-    </EditText>
+        android:layout_height="wrap_content">
+
+        <EditText android:id="@+id/filter_tags"
+            android:maxLines="1"
+            android:layout_height="wrap_content"
+            android:layout_width="match_parent"
+            android:gravity="start"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:textSize="24sp"
+            android:hint="@string/search_tags">
+        </EditText>
+
+        <ImageButton
+            android:id="@+id/add_new_tag_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:src="@drawable/ic_baseline_add_circle_outline_24"
+            android:layout_centerVertical="true"
+            android:layout_margin="5dp"
+            android:text="@string/add_new_tag"
+            tools:ignore="ContentDescription,RelativeOverlap" />
+
+    </RelativeLayout>
 
     <ListView android:id="@+id/tag_list"
         android:layout_width="fill_parent"
