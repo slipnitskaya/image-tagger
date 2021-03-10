@@ -1,3 +1,4 @@
+import os
 import base64
 
 import tqdm
@@ -101,30 +102,31 @@ def save_statistics(emb_stats: np.ndarray, idx_to_wnidx: Dict[int, str],
             out_csv.write(line)
 
 
-def parse_arguments() -> Tuple[str, str, str, str, str, bool]:
+def prepare_data(path_to_data: str) -> tv.datasets.ImageFolder:
     """
-    Parse command line arguments
+    Load and transform images
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--path-to-data', type=str)
-    parser.add_argument('-w', '--path-to-words', type=str)
-    parser.add_argument('-m', '--path-to-model', type=str)
-    parser.add_argument('-e', '--path-to-embeddings', type=str)
-    parser.add_argument('-t', '--path-to-table', type=str)
-    parser.add_argument('-q', '--quantize', action='store_true', default=False)
+    ds_root = os.path.join(path_to_data, 'val')
+    path_to_all_images = os.path.join(ds_root, 'images')
+    ds_index = pd.read_csv(os.path.join(ds_root, 'val_annotations.txt'), sep='\t', header=None)
 
-    args = parser.parse_args()
+    for row_idx, row in tqdm.tqdm(ds_index.iterrows(), total=len(ds_index)):
+        fn, wnid = row[:2]
+        path_to_class = os.path.join(ds_root, wnid)
+        path_to_image = os.path.join(path_to_class, fn)
 
-    return args.path_to_data, args.path_to_words, args.path_to_model, args.path_to_embeddings, args.path_to_table, args.quantize
+        if not os.path.exists(path_to_image):
+            os.makedirs(path_to_class, exist_ok=True)
+            try:
+                os.rename(os.path.join(path_to_all_images, fn), path_to_image)
+            except OSError:
+                pass
 
+    if os.path.exists(path_to_all_images) and not os.listdir(path_to_all_images):
+        os.rmdir(path_to_all_images)
 
-def main():
-    path_to_data, path_to_words, path_to_model, path_to_embeddings, path_to_table, quantize = parse_arguments()
-
-    print(f'Loading data...\n\tImages: {path_to_data}\n\tClass labels mapping: {path_to_words}')
-    # load and transform images
     ds = tv.datasets.ImageFolder(
-        root=path_to_data,
+        root=ds_root,
         transform=tv.transforms.Compose([
             tv.transforms.Resize(256),
             tv.transforms.CenterCrop(256),
@@ -132,14 +134,51 @@ def main():
             tv.transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
     )
-    idx_to_wnidx = {idx: label for label, idx in ds.class_to_idx.items()}
+    return ds
 
-    # map WordNet ids to labels
-    wnidx_to_label = dict()
-    for row_idx, row in pd.read_csv(path_to_words, sep='\t', names=['wn_idx', 'labels'], na_filter=False).iterrows():
-        wn_idx = row['wn_idx']
-        labels = row['labels']
-        wnidx_to_label[wn_idx] = labels.split(',').pop(0).strip(' ')
+
+def extract_wordnet_labels(path_to_data: str) -> Dict:
+    """
+    Map WordNet ids to labels
+    """
+    path_to_words = os.path.join(path_to_data, 'words.txt')
+    if os.path.exists(path_to_words):
+        wnidx_to_label = dict()
+        for row_idx, row in pd.read_csv(path_to_words, sep='\t', names=['wn_idx', 'labels'], na_filter=False).iterrows():
+            wn_idx = row['wn_idx']
+            labels = row['labels']
+            wnidx_to_label[wn_idx] = labels.split(',').pop(0).strip(' ')
+    else:
+        raise FileNotFoundError(path_to_words)
+
+    return wnidx_to_label
+
+
+def parse_arguments():
+    """
+    Parse command line arguments
+    """
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('-d', '--path-to-data', type=str, required=True)
+    parser.add_argument('-m', '--path-to-model', type=str, required=True)
+    parser.add_argument('-e', '--path-to-embeddings', type=str, required=True)
+    parser.add_argument('-t', '--path-to-table', type=str, required=True)
+    parser.add_argument('-q', '--quantize', action='store_true', default=False)
+
+    args = parser.parse_args()
+
+    return args.path_to_data, args.path_to_model, args.path_to_embeddings, args.path_to_table, args.quantize
+
+
+def main():
+    path_to_data, path_to_model, path_to_embeddings, path_to_table, quantize = parse_arguments()
+
+    print(f'Loading data...\n\tImages: {path_to_data}')
+    ds = prepare_data(path_to_data)
+
+    idx_to_wnidx = {idx: label for label, idx in ds.class_to_idx.items()}
+    wnidx_to_label = extract_wordnet_labels(path_to_data)
 
     print(f'Loading model...\n\tModel: {path_to_model}')
     net = create_model(quantize, path_to_model)
