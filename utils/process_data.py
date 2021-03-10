@@ -86,7 +86,7 @@ def save_statistics(emb_stats: np.ndarray, idx_to_wnidx: Dict[int, str],
         label = wnidx_to_label[idx_to_wnidx[cid]]
         mean = [float(v) for v in entry[:emb_size]]
         std = [float(v) for v in entry[emb_size:2 * emb_size]]
-        cnt = float(entry[-1].item())
+        cnt = int(entry[-1].item())
         row = (
             cid,
             label,
