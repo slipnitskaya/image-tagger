@@ -19,6 +19,7 @@ class GaussianNaiveBayes(private val coroutineScope: CoroutineScope) {
                 .div(classStatistics.std)
                 .sum()
                 .add(Transforms.log(classStatistics.std?.mul(2 * PI)).sumNumber())
+                .mul(-0.5)
                 .sumNumber()
                 .toFloat()
         }
@@ -36,7 +37,7 @@ class GaussianNaiveBayes(private val coroutineScope: CoroutineScope) {
             .toMap()
     }
 
-    private suspend fun calculateLikelihoods(x: INDArray, statistics: List<Statistics>): Map<Int?, Float> {
+    private suspend fun calculateLikelihoods(x: INDArray, statistics: List<Statistics>): Map<Int, Float> {
         val sampleCounts = statistics.map { classStatistics ->
             Pair(classStatistics.cid, classStatistics.count as Int)
         }.toMap()
@@ -59,11 +60,11 @@ class GaussianNaiveBayes(private val coroutineScope: CoroutineScope) {
             .associateWith { classId ->
                 sequenceOf(priors[classId], posteriors[classId])
                     .filterNotNull()
-                    .reduce { prior, posterior -> prior * posterior }
+                    .reduce { prior, posterior -> prior + posterior }
             }
     }
 
-    suspend fun calculateProbabilities(x: INDArray, statistics: List<Statistics>): Map<Int?, Float> {
+    suspend fun calculateProbabilities(x: INDArray, statistics: List<Statistics>): Map<Int, Float> {
         val (classIds, likelihoods) = calculateLikelihoods(x, statistics)
             .map { classLikelihoods ->
                 Pair(classLikelihoods.key, classLikelihoods.value)

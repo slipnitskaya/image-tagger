@@ -43,7 +43,7 @@ object Utils {
     }
 
     fun getTopPredictions(
-            classProbabilities: Map<Int?, Float>,
+            classProbabilities: Map<Int, Float>,
             threshold: Float = Constants.PROBABILITY_THRESHOLD
     ): List<Int> {
         val probabilities = classProbabilities.toMutableMap()
