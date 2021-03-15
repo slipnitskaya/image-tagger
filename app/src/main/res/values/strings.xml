@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Caption Assistant</string>
+    <string name="app_name">Image Tagger</string>
     <string name="background">Background</string>
     <string name="chosen_image">Chosen Image</string>
     <string name="predictions">Predictions</string>
@@ -8,4 +8,5 @@
     <string name="discard_button">Discard</string>
     <string name="add_new_tag">Add new tag</string>
     <string name="search_tags">Search tags</string>
+    <string name="upload_image_text">Upload your image</string>
 </resources>

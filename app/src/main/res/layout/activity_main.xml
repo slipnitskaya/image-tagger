@@ -7,22 +7,40 @@
     android:background="@drawable/gradient"
     tools:context=".MainActivity">
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/image_feed"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent" >
+
+        <TextView
+            android:id="@+id/upload_image_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="@string/upload_image_text"
+            android:textSize="30sp"
+            android:textStyle="bold"
+            android:textColor="@color/purple_700"/>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/image_feed"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+    </FrameLayout>
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fab_upload"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="31dp"
-        android:layout_marginBottom="23dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="28dp"
         android:clickable="true"
+        app:tint="@color/purple_700"
+        app:backgroundTint="@color/purple_200"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:srcCompat="@android:drawable/ic_menu_upload"
@@ -30,13 +48,16 @@
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fab_camera"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="55dp"
+        android:layout_height="55dp"
         android:layout_marginEnd="2dp"
-        android:layout_marginBottom="18dp"
+        android:layout_marginBottom="12dp"
         android:clickable="true"
+        app:tint="@color/purple_700"
+        app:backgroundTint="@color/purple_200"
         app:layout_constraintBottom_toTopOf="@+id/fab_upload"
         app:layout_constraintEnd_toEndOf="@+id/fab_upload"
         app:srcCompat="@android:drawable/ic_menu_camera"
         tools:ignore="ContentDescription" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

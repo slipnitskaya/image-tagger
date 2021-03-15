@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.caption_assistant">
+    package="com.example.image_tagger">
 
     <uses-permission
         android:name="android.permission.CAMERA" />
@@ -9,7 +9,7 @@
         android:required="false" />
 
     <application
-        android:name=".CaptionAssistant"
+        android:name="com.example.image_tagger.ImageTagger"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_descriptor"
         android:icon="@mipmap/ic_launcher"
@@ -20,7 +20,7 @@
         android:theme="@style/Theme.CaptionAssistant">
         
         <activity
-            android:name=".MainActivity"
+            android:name="com.example.image_tagger.MainActivity"
             android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -28,7 +28,7 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".CaptionActivity"
+            android:name="com.example.image_tagger.TaggerActivity"
             android:screenOrientation="portrait">
         </activity>
 

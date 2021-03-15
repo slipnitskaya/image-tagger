@@ -9,7 +9,7 @@ android {
     buildToolsVersion "30.0.3"
 
     defaultConfig {
-        applicationId "com.example.caption_assistant"
+        applicationId "com.example.image_tagger"
         minSdkVersion 27
         targetSdkVersion 30
         versionCode 1
@@ -78,8 +78,10 @@ dependencies {
     implementation  group: 'org.bytedeco', name: 'openblas', version: openBLASVersion, classifier: "android-x86"
     implementation  group: 'org.bytedeco', name: 'openblas', version: openBLASVersion, classifier: "android-x86_64"
 
-    implementation 'org.pytorch:pytorch_android:1.7.1'
-    implementation 'org.pytorch:pytorch_android_torchvision:1.7.1'
+    def pyTorchVersion = '1.7.1'
+
+    implementation "org.pytorch:pytorch_android:$pyTorchVersion"
+    implementation "org.pytorch:pytorch_android_torchvision:$pyTorchVersion"
 
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.3.9'
 
