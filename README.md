@@ -1,9 +1,12 @@
 # ImageTagger
 ## AI-based Android app for automated image tagging
 
-This project demonstrates AI-based Android app, that allows to generate tags given an image. 
+This project demonstrates AI-based Android app, that allows to generate tags given an image.
+
+![](utils/images/image-tagger.gif)
 
 ### Motivation & Summary
+
 The amount of visual information - such as photos and social media images - has been getting bigger exponentially over past decades, motivating the development of software that can effectively handle high-volume image collections.
 Specifically, the ability to generate relevant textual labels for images can help users to eliminate manual image processing, automate image labeling (ex. web content tagging, online catalogs) and potentially benefit existing applications that imply organization of high-volume imaging data (ex. image managers), image search and sharing (ex. recommendation engines).
 
@@ -28,7 +31,7 @@ Given a cumulative probability threshold of 0.9, the aforementioned combination 
  
 As deep neural networks are quite computationally expensive, the inference speed becomes usually a bottleneck. 
 To address this issue and increase the model’s throughput, the approach called model quantization was applied. 
-It allowed to substantially reduce time needed to perform the feature extraction step (from 212.0 +/- 12.6 ms to 50.1 +/- 9.1 ms on Nokia 7.1) for the cost of a marginal decrease of the validation accuracy (from 56.09% to 55.67%). 
+This improvement allowed to substantially reduce the time needed to perform the feature extraction step (from 212.0 +/- 12.6 ms to 50.1 +/- 9.1 ms on Nokia 7.1) for the cost of a marginal decrease of the validation accuracy (from 56.09% to 55.67%). 
 
 Therefore, the developed ImageTagger Android app allows to automatically generate relevant textual annotations of user images.
 The further accuracy improvement can be achieved considering training on a larger dataset (e.g. ImageNet, YFCC100M). 
@@ -58,13 +61,11 @@ The following Python modules demonstrate how to process the data, train and eval
 **Installing Android App:**
 In order to run the ImageTagger app on your Android device follow the instructions:
 
-1. Download the release [file](https://github.com/slipnitskaya/caption-assistant/releases/download/v1.0-alpha/image-tagger-v1.0-alpha.apk) to your Android device.
+1. Download the release [file](https://github.com/slipnitskaya/image-tagger/releases/download/v1.0-alpha/image-tagger-v1.0-alpha.apk) to your Android device.
 
 2. Open the app on your Android device
 
 3. Enjoy the automatic image tagging!
-
-![](utils/images/image-tagger.gif)
 
 **Run Python Code:** 
 

@@ -9,19 +9,18 @@ import numpy as np
 import pandas as pd
 
 import torch
-import torch.utils.data as td
 import torch.utils.mobile_optimizer
 
 import torchvision as tv
 
 from typing import Dict
 
-from utils.constants import NUM_CHANNELS
-from utils.constants import INPUT_HEIGHT
-from utils.constants import INPUT_WIDTH
-from utils.constants import SHORT_SIDE
-from utils.constants import IMAGENET_MEAN
-from utils.constants import IMAGENET_STD
+from constants import NUM_CHANNELS
+from constants import INPUT_HEIGHT
+from constants import INPUT_WIDTH
+from constants import SHORT_SIDE
+from constants import IMAGENET_MEAN
+from constants import IMAGENET_STD
 
 DEVICE = 'cpu'
 
@@ -215,7 +214,7 @@ def main():
 
     wnidx_to_label = extract_wordnet_labels(args.path_to_data)
 
-    path_to_table = os.path.join('generated', f'caption_assistant_{args.model_arch}_{split}{suffix}.csv')
+    path_to_table = os.path.join('generated', f'image_tagger_{args.model_arch}_{split}{suffix}.csv')
 
     print(f'Loading model...\n\tModel: {args.model_arch}{suffix}')
     net = create_model(args.model_arch, args.quantize, DEVICE)

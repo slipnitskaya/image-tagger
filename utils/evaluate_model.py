@@ -7,16 +7,14 @@ import pandas as pd
 
 import torchvision as tv
 
-import matplotlib.pyplot as plt
-
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import top_k_accuracy_score
 
 from typing import Optional
 
-from utils.constants import SHORT_SIDE
-from utils.constants import IMAGENET_MEAN
-from utils.constants import IMAGENET_STD
+from constants import SHORT_SIDE
+from constants import IMAGENET_MEAN
+from constants import IMAGENET_STD
 
 
 class GaussianNaiveBayes(object):
